@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>{{COMPANY_NAME}} - Demo</title>
+<style>
+  :root {
+    --primary: #4f46e5;
+    --primary-dark: #3730a3;
+    --bg: #ffffff;
+    --text: #1f2937;
+    --muted: #6b7280;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; color: var(--text); background: var(--bg); line-height: 1.6; }
+  header.hero { background: linear-gradient(135deg, var(--primary), var(--primary-dark)); color: white; padding: 90px 20px; text-align: center; }
+  header.hero h1 { font-size: 2.8rem; margin-bottom: 12px; }
+  header.hero p { font-size: 1.2rem; opacity: 0.9; max-width: 600px; margin: 0 auto; }
+  .cta-btn { display: inline-block; margin-top: 30px; padding: 14px 32px; background: white; color: var(--primary); border-radius: 30px; text-decoration: none; font-weight: 600; }
+  section { padding: 60px 20px; max-width: 900px; margin: 0 auto; }
+  section h2 { font-size: 2rem; margin-bottom: 20px; color: var(--primary-dark); }
+  .features-list { list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; }
+  .features-list li { background: #f3f4f6; padding: 20px; border-radius: 12px; font-weight: 500; border-left: 4px solid var(--primary); }
+  footer { background: #111827; color: #9ca3af; text-align: center; padding: 30px 20px; margin-top: 40px; }
+  .muted { color: var(--muted); }
+</style>
+</head>
+<body>
+  <header class="hero">
+    <h1>{{COMPANY_NAME}}</h1>
+    <p>Proudly serving {{TARGET_AUDIENCE}} in the {{INDUSTRY}} industry.</p>
+    <a class="cta-btn" href="#contact">Get In Touch</a>
+  </header>
+
+  <section id="about">
+    <h2>About Us</h2>
+    <p>{{DESCRIPTION}}</p>
+  </section>
+
+  <section id="features">
+    <h2>What We Offer</h2>
+    <ul class="features-list">
+      {{FEATURES_LIST}}
+    </ul>
+  </section>
+
+  <section id="contact">
+    <h2>Contact {{CLIENT_NAME}}</h2>
+    <p class="muted">Phone: {{PHONE}} &nbsp;|&nbsp; Email: {{EMAIL}}</p>
+  </section>
+
+  <footer>
+    <p>This is a sample demo website generated for {{COMPANY_NAME}} — created by Arkido.</p>
+  </footer>
+</body>
+</html>

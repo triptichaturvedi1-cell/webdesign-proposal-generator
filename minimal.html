@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>{{COMPANY_NAME}} - Demo</title>
+<style>
+  :root {
+    --text: #111111;
+    --muted: #777777;
+    --line: #e5e5e5;
+    --bg: #ffffff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Helvetica Neue', Arial, sans-serif; color: var(--text); background: var(--bg); line-height: 1.7; }
+  header.hero { padding: 100px 20px 60px; text-align: center; border-bottom: 1px solid var(--line); }
+  header.hero h1 { font-size: 2.4rem; font-weight: 300; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 16px; }
+  header.hero p { font-size: 1.05rem; color: var(--muted); max-width: 500px; margin: 0 auto; }
+  .cta-btn { display: inline-block; margin-top: 30px; padding: 12px 30px; border: 1px solid var(--text); color: var(--text); text-decoration: none; font-size: 0.9rem; letter-spacing: 1px; text-transform: uppercase; }
+  section { padding: 60px 20px; max-width: 700px; margin: 0 auto; border-bottom: 1px solid var(--line); }
+  section:last-of-type { border-bottom: none; }
+  section h2 { font-size: 1.3rem; font-weight: 500; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 20px; }
+  .features-list { list-style: none; }
+  .features-list li { padding: 14px 0; border-bottom: 1px solid var(--line); }
+  .features-list li:last-child { border-bottom: none; }
+  footer { text-align: center; padding: 30px 20px; color: var(--muted); font-size: 0.85rem; }
+</style>
+</head>
+<body>
+  <header class="hero">
+    <h1>{{COMPANY_NAME}}</h1>
+    <p>Serving {{TARGET_AUDIENCE}} — {{INDUSTRY}}</p>
+    <a class="cta-btn" href="#contact">Get In Touch</a>
+  </header>
+
+  <section id="about">
+    <h2>About</h2>
+    <p>{{DESCRIPTION}}</p>
+  </section>
+
+  <section id="features">
+    <h2>What We Offer</h2>
+    <ul class="features-list">
+      {{FEATURES_LIST}}
+    </ul>
+  </section>
+
+  <section id="contact">
+    <h2>Contact {{CLIENT_NAME}}</h2>
+    <p>{{PHONE}} &nbsp;/&nbsp; {{EMAIL}}</p>
+  </section>
+
+  <footer>
+    <p>Sample demo website for {{COMPANY_NAME}} — created by Arkido.</p>
+  </footer>
+</body>
+</html>

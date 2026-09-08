@@ -23,6 +23,7 @@ WHY IT IS BUILT THIS WAY (for a beginner):
 import streamlit as st
 import pandas as pd
 import os
+import html as html_escape  # used to safely insert client text into HTML templates
 from datetime import datetime
 
 # --------------------------------------------------------------
@@ -31,6 +32,12 @@ from datetime import datetime
 
 # Name of the CSV file where all client data is permanently stored.
 CSV_FILE = "arkido_clients.csv"
+
+# Folder that holds the fixed HTML demo templates (Modern, Minimal, etc.)
+TEMPLATES_DIR = "templates"
+
+# Folder where generated client demo websites are saved
+DEMOS_DIR = "demos"
 
 # This list defines the exact column order used in the CSV file.
 # NOTE: If you add a new form field later, also add its column
@@ -115,6 +122,90 @@ def save_client(new_client_dict):
     updated_df.to_csv(CSV_FILE, index=False)
 
 
+def safe_get(row, column_name, default=""):
+    """
+    Safely reads one value out of a Pandas row (a "Series").
+    Returns 'default' if the column is missing or the value is empty (NaN).
+    This stops the app from crashing on old rows that don't have every column.
+    """
+    value = row.get(column_name, default)
+    if pd.isna(value):
+        return default
+    return str(value)
+
+
+def build_features_list_html(features_text):
+    """
+    Turns a comma-separated string like "Contact Form, Blog, Chatbot"
+    into HTML list items: <li>Contact Form</li><li>Blog</li>...
+    Falls back to a friendly default if no features were recorded.
+    """
+    if not features_text or pd.isna(features_text) or str(features_text).strip() == "":
+        return "<li>Custom features tailored to your business</li>"
+
+    items = [item.strip() for item in str(features_text).split(",") if item.strip() != ""]
+    if not items:
+        return "<li>Custom features tailored to your business</li>"
+
+    # html_escape.escape() protects against any stray HTML characters
+    # in the client's data (e.g. < or & symbols) breaking the page.
+    return "\n".join(f"<li>{html_escape.escape(item)}</li>" for item in items)
+
+
+def guess_template_style(preferred_style_text):
+    """
+    Looks at the client's free-text 'Preferred Style' answer and guesses
+    which of our 4 fixed templates matches best. Defaults to 'Modern'.
+    """
+    text = str(preferred_style_text).lower()
+    if "minimal" in text:
+        return "Minimal"
+    elif "corporate" in text:
+        return "Corporate"
+    elif "dark" in text:
+        return "Dark"
+    else:
+        return "Modern"
+
+
+def generate_demo_html(client_row, template_style):
+    """
+    Builds a ready-to-view demo website (as one HTML string) for a client.
+
+    Steps:
+      1. Open the chosen template file (e.g. templates/modern.html).
+      2. Replace each {{PLACEHOLDER}} with the client's real data.
+      3. Return the finished HTML text.
+    """
+    template_path = os.path.join(TEMPLATES_DIR, f"{template_style.lower()}.html")
+    with open(template_path, "r", encoding="utf-8") as f:
+        template_text = f.read()
+
+    # Map every placeholder in the template to a real value from the client's row.
+    # html_escape.escape() keeps the client's text from accidentally breaking the HTML.
+    replacements = {
+        "{{CLIENT_NAME}}": html_escape.escape(safe_get(client_row, "Client Name")),
+        "{{COMPANY_NAME}}": html_escape.escape(
+            safe_get(client_row, "Company Name", safe_get(client_row, "Client Name"))
+        ),
+        "{{INDUSTRY}}": html_escape.escape(safe_get(client_row, "Industry", "your industry")),
+        "{{DESCRIPTION}}": html_escape.escape(
+            safe_get(client_row, "Business Description", "We provide quality products and services.")
+        ),
+        "{{TARGET_AUDIENCE}}": html_escape.escape(
+            safe_get(client_row, "Target Audience", "our valued customers")
+        ),
+        "{{FEATURES_LIST}}": build_features_list_html(client_row.get("Required Features", "")),
+        "{{PHONE}}": html_escape.escape(safe_get(client_row, "Phone Number", "N/A")),
+        "{{EMAIL}}": html_escape.escape(safe_get(client_row, "Email Address", "N/A")),
+    }
+
+    for placeholder, value in replacements.items():
+        template_text = template_text.replace(placeholder, value)
+
+    return template_text
+
+
 # --------------------------------------------------------------
 # 3. SIDEBAR NAVIGATION
 # --------------------------------------------------------------
@@ -123,7 +214,10 @@ def save_client(new_client_dict):
 # everything in one file, which is easier for a beginner to follow.
 
 st.sidebar.title("ARKIDO")
-page = st.sidebar.radio("Go to:", ["📝 New Client Intake", "📊 Client Dashboard"])
+page = st.sidebar.radio(
+    "Go to:",
+    ["📝 New Client Intake", "📊 Client Dashboard", "🖥️ Website Demo Generator"],
+)
 
 
 # ================================================================
@@ -388,3 +482,71 @@ elif page == "📊 Client Dashboard":
             file_name="arkido_clients_filtered.csv",
             mime="text/csv",
         )
+
+
+# ================================================================
+# PAGE 3: WEBSITE DEMO GENERATOR
+# ================================================================
+elif page == "🖥️ Website Demo Generator":
+
+    st.title("🖥️ Website Demo Generator")
+    st.write(
+        "Turn a saved client's requirements into a quick, one-page demo website "
+        "you can preview here and download to share with them."
+    )
+
+    df = load_clients()
+
+    if df.empty:
+        st.info("No clients yet. Add a client from the 'New Client Intake' page first.")
+    else:
+        # Build a readable label for the dropdown, e.g. "Riya Sharma - Riya Bakes (2026-01-05 14:02)"
+        client_labels = (
+            df["Client Name"].astype(str)
+            + " - "
+            + df["Company Name"].astype(str)
+            + " ("
+            + df["Date Added"].astype(str)
+            + ")"
+        )
+        selected_label = st.selectbox("Choose a client", client_labels.tolist())
+
+        # Find the full row of data that matches the label the user picked
+        selected_row = df[client_labels == selected_label].iloc[0]
+
+        # Suggest a template based on what the client said they preferred,
+        # but still let the user override it with the dropdown below.
+        suggested_style = guess_template_style(selected_row.get("Preferred Style", ""))
+        style_options = ["Modern", "Minimal", "Corporate", "Dark"]
+        default_index = style_options.index(suggested_style) if suggested_style in style_options else 0
+
+        template_choice = st.selectbox("Demo Style Template", style_options, index=default_index)
+        st.caption(f"Suggested based on this client's 'Preferred Style' answer: **{suggested_style}**")
+
+        if st.button("⚡ Generate Demo Website"):
+            demo_html = generate_demo_html(selected_row, template_choice)
+
+            # Save the demo permanently to the demos/ folder so you can find it again later
+            os.makedirs(DEMOS_DIR, exist_ok=True)
+            safe_name = "".join(
+                c for c in str(selected_row["Client Name"]) if c.isalnum() or c == " "
+            ).strip().replace(" ", "_")
+            demo_filename = f"{safe_name}_{template_choice.lower()}_demo.html"
+            demo_path = os.path.join(DEMOS_DIR, demo_filename)
+
+            with open(demo_path, "w", encoding="utf-8") as f:
+                f.write(demo_html)
+
+            st.success(f"Demo generated and saved to demos/{demo_filename}")
+
+            # Show a live preview of the demo website right inside the app
+            st.subheader("Live Preview")
+            st.components.v1.html(demo_html, height=900, scrolling=True)
+
+            # Let the user download the standalone HTML file to send to the client
+            st.download_button(
+                "⬇️ Download Demo HTML",
+                data=demo_html,
+                file_name=demo_filename,
+                mime="text/html",
+            )

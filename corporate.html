@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>{{COMPANY_NAME}} - Demo</title>
+<style>
+  :root {
+    --navy: #0f3460;
+    --navy-dark: #0a2647;
+    --gold: #d4af37;
+    --text: #1e293b;
+    --bg: #f8fafc;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Georgia, 'Times New Roman', serif; color: var(--text); background: var(--bg); line-height: 1.7; }
+  header.top-bar { background: var(--navy-dark); color: white; padding: 14px 20px; text-align: center; font-size: 0.85rem; letter-spacing: 1px; }
+  header.hero { background: var(--navy); color: white; padding: 80px 20px; text-align: center; }
+  header.hero h1 { font-size: 2.6rem; margin-bottom: 14px; }
+  header.hero p { font-size: 1.1rem; color: #cbd5e1; max-width: 600px; margin: 0 auto; }
+  .cta-btn { display: inline-block; margin-top: 28px; padding: 14px 34px; background: var(--gold); color: var(--navy-dark); text-decoration: none; font-weight: bold; }
+  section { padding: 60px 20px; max-width: 900px; margin: 0 auto; }
+  section h2 { font-size: 1.8rem; margin-bottom: 20px; color: var(--navy); border-bottom: 2px solid var(--gold); padding-bottom: 10px; display: inline-block; }
+  .features-list { list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-top: 10px; }
+  .features-list li { background: white; padding: 18px; border: 1px solid #e2e8f0; border-left: 4px solid var(--navy); }
+  footer { background: var(--navy-dark); color: #cbd5e1; text-align: center; padding: 30px 20px; margin-top: 40px; }
+</style>
+</head>
+<body>
+  <header class="top-bar">TRUSTED BY BUSINESSES IN {{INDUSTRY}}</header>
+  <header class="hero">
+    <h1>{{COMPANY_NAME}}</h1>
+    <p>Delivering reliable solutions for {{TARGET_AUDIENCE}}.</p>
+    <a class="cta-btn" href="#contact">Request a Consultation</a>
+  </header>
+
+  <section id="about">
+    <h2>About Us</h2>
+    <p>{{DESCRIPTION}}</p>
+  </section>
+
+  <section id="features">
+    <h2>Our Services</h2>
+    <ul class="features-list">
+      {{FEATURES_LIST}}
+    </ul>
+  </section>
+
+  <section id="contact">
+    <h2>Contact {{CLIENT_NAME}}</h2>
+    <p>Phone: {{PHONE}} &nbsp;|&nbsp; Email: {{EMAIL}}</p>
+  </section>
+
+  <footer>
+    <p>This is a sample demo website generated for {{COMPANY_NAME}} — created by Arkido.</p>
+  </footer>
+</body>
+</html>
