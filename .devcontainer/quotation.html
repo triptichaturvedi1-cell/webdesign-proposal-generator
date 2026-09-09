@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Quotation - {{COMPANY_NAME}}</title>
+<style>
+  :root {
+    --primary: {{PRIMARY_COLOR}};
+    --text: #1f2937;
+    --muted: #6b7280;
+    --line: #e5e7eb;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; color: var(--text); background: #ffffff; padding: 40px; max-width: 800px; margin: 0 auto; }
+  .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid var(--primary); padding-bottom: 20px; margin-bottom: 30px; }
+  .header .agency-info { display: flex; align-items: center; gap: 14px; }
+  .header img.logo { max-height: 60px; max-width: 160px; object-fit: contain; }
+  .header h1 { font-size: 1.4rem; color: var(--primary); }
+  .header .tagline { color: var(--muted); font-size: 0.85rem; }
+  .quote-meta { text-align: right; font-size: 0.9rem; color: var(--muted); }
+  .section-title { font-size: 1rem; text-transform: uppercase; letter-spacing: 1px; color: var(--primary); margin: 30px 0 10px; }
+  .client-box { background: #f9fafb; padding: 16px 20px; border-radius: 8px; margin-bottom: 10px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  th, td { text-align: left; padding: 12px 10px; border-bottom: 1px solid var(--line); }
+  th { background: #f3f4f6; font-size: 0.85rem; text-transform: uppercase; color: var(--muted); }
+  td.amount, th.amount { text-align: right; }
+  .total-row td { font-weight: 700; font-size: 1.1rem; border-top: 2px solid var(--primary); border-bottom: none; }
+  .notes { margin-top: 30px; font-size: 0.9rem; color: var(--muted); }
+  .footer { margin-top: 50px; text-align: center; color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--line); padding-top: 20px; }
+</style>
+</head>
+<body>
+
+  <div class="header">
+    <div class="agency-info">
+      {{AGENCY_LOGO_TAG}}
+      <div>
+        <h1>{{AGENCY_NAME}}</h1>
+        <div class="tagline">{{AGENCY_TAGLINE}}</div>
+      </div>
+    </div>
+    <div class="quote-meta">
+      <div><strong>Quotation Date:</strong> {{QUOTE_DATE}}</div>
+      <div><strong>Valid Until:</strong> {{VALID_UNTIL}}</div>
+    </div>
+  </div>
+
+  <div class="section-title">Prepared For</div>
+  <div class="client-box">
+    <strong>{{CLIENT_NAME}}</strong> — {{COMPANY_NAME}}<br>
+    {{EMAIL}} &nbsp;|&nbsp; {{PHONE}}
+  </div>
+
+  <div class="section-title">Quotation Details</div>
+  <table>
+    <thead>
+      <tr>
+        <th>Item</th>
+        <th class="amount">Amount (₹)</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{LINE_ITEM_ROWS}}
+      <tr class="total-row">
+        <td>Total</td>
+        <td class="amount">₹ {{TOTAL_AMOUNT}}</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="notes">
+    <strong>Notes:</strong> This quotation is an estimate based on the requirements discussed.
+    Final pricing may be adjusted after detailed scoping. Prices are exclusive of any applicable taxes.
+  </div>
+
+  <div class="footer">
+    {{AGENCY_NAME}} &nbsp;|&nbsp; {{AGENCY_CONTACT}}
+  </div>
+
+</body>
+</html>
