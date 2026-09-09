@@ -189,6 +189,26 @@ def guess_template_style(preferred_style_text):
         return "Modern"
 
 
+def read_template_file(template_path):
+    """
+    Opens a template HTML file and returns its text.
+    If the file is missing (a very common beginner mistake when a folder
+    didn't get uploaded to GitHub), this shows a clear, friendly error
+    message in the app instead of crashing with a confusing traceback.
+    """
+    if not os.path.exists(template_path):
+        st.error(
+            f"⚠️ Missing template file: `{os.path.relpath(template_path, APP_DIR)}`\n\n"
+            "This usually means the `templates/` folder wasn't fully uploaded "
+            "to GitHub. Open your repository on GitHub and confirm this exact "
+            "file exists there — if not, re-upload the `templates/` folder "
+            "(see the 'How to add new fields' notes for the safest upload method)."
+        )
+        st.stop()
+    with open(template_path, "r", encoding="utf-8") as f:
+        return f.read()
+
+
 def generate_demo_html(client_row, template_style):
     """
     Builds a ready-to-view demo website (as one HTML string) for a client.
@@ -199,8 +219,7 @@ def generate_demo_html(client_row, template_style):
       3. Return the finished HTML text.
     """
     template_path = os.path.join(TEMPLATES_DIR, f"{template_style.lower()}.html")
-    with open(template_path, "r", encoding="utf-8") as f:
-        template_text = f.read()
+    template_text = read_template_file(template_path)
 
     # Map every placeholder in the template to a real value from the client's row.
     # html_escape.escape() keeps the client's text from accidentally breaking the HTML.
@@ -347,8 +366,7 @@ def generate_quotation_html(client_row, line_items_df, settings_dict, valid_days
       - the agency's branding settings (logo, name, color)
     """
     template_path = os.path.join(TEMPLATES_DIR, "quotation.html")
-    with open(template_path, "r", encoding="utf-8") as f:
-        template_text = f.read()
+    template_text = read_template_file(template_path)
 
     # Build the HTML table rows from the line items DataFrame
     rows_html = ""
