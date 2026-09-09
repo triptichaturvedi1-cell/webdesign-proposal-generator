@@ -23,8 +23,9 @@ WHY IT IS BUILT THIS WAY (for a beginner):
 import streamlit as st
 import pandas as pd
 import os
+import json  # used to save/load agency branding settings as a simple settings file
 import html as html_escape  # used to safely insert client text into HTML templates
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # --------------------------------------------------------------
 # 1. BASIC SETTINGS
@@ -33,11 +34,31 @@ from datetime import datetime
 # Name of the CSV file where all client data is permanently stored.
 CSV_FILE = "arkido_clients.csv"
 
+# APP_DIR = the folder this app.py file lives in. Using this instead of a
+# plain relative path ("templates") makes file lookup reliable no matter
+# what "current folder" the server happens to be running from.
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
+
 # Folder that holds the fixed HTML demo templates (Modern, Minimal, etc.)
-TEMPLATES_DIR = "templates"
+TEMPLATES_DIR = os.path.join(APP_DIR, "templates")
 
 # Folder where generated client demo websites are saved
-DEMOS_DIR = "demos"
+DEMOS_DIR = os.path.join(APP_DIR, "demos")
+
+# Folder where the uploaded agency logo is stored
+BRANDING_DIR = os.path.join(APP_DIR, "branding")
+
+# Folder where generated quotation documents are saved
+QUOTATIONS_DIR = os.path.join(APP_DIR, "quotations")
+
+# JSON file that stores your agency's branding & contact details
+SETTINGS_FILE = os.path.join(APP_DIR, "agency_settings.json")
+
+# CSV file that holds your editable price list (open it in Excel any time)
+PRICING_FILE = os.path.join(APP_DIR, "pricing_config.csv")
+
+# How many pages are included in the base price before "Extra Page" pricing kicks in
+INCLUDED_PAGES = 5
 
 # This list defines the exact column order used in the CSV file.
 # NOTE: If you add a new form field later, also add its column
@@ -207,16 +228,254 @@ def generate_demo_html(client_row, template_style):
 
 
 # --------------------------------------------------------------
-# 3. SIDEBAR NAVIGATION
+# 2b. AGENCY BRANDING SETTINGS (logo, name, colors, contact info)
 # --------------------------------------------------------------
-# A simple sidebar radio button lets us switch between two "pages"
+
+# Sensible defaults used until the agency fills in their own settings
+DEFAULT_SETTINGS = {
+    "agency_name": "Arkido",
+    "tagline": "Web Design & Digital Marketing",
+    "email": "",
+    "phone": "",
+    "primary_color": "#4f46e5",
+    "logo_filename": "",
+}
+
+
+def load_agency_settings():
+    """
+    Reads agency_settings.json from disk.
+    Returns the saved settings, or the defaults if nothing has been saved yet.
+    """
+    if os.path.exists(SETTINGS_FILE):
+        with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+            saved = json.load(f)
+        # Fill in any missing keys with defaults (handy if we add new settings later)
+        merged = {**DEFAULT_SETTINGS, **saved}
+        return merged
+    return DEFAULT_SETTINGS.copy()
+
+
+def save_agency_settings(settings_dict):
+    """Writes the agency settings dictionary to agency_settings.json."""
+    with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
+        json.dump(settings_dict, f, indent=2)
+
+
+def get_logo_path(settings_dict):
+    """Returns the full path to the saved logo file, or None if no logo was uploaded."""
+    filename = settings_dict.get("logo_filename", "")
+    if filename:
+        path = os.path.join(BRANDING_DIR, filename)
+        if os.path.exists(path):
+            return path
+    return None
+
+
+# --------------------------------------------------------------
+# 2c. PRICING & QUOTATION GENERATOR
+# --------------------------------------------------------------
+
+def load_pricing():
+    """
+    Reads pricing_config.csv into a Pandas DataFrame.
+    You can open this CSV in Excel/Google Sheets to update your prices —
+    no code changes needed.
+    """
+    if os.path.exists(PRICING_FILE):
+        return pd.read_csv(PRICING_FILE)
+    else:
+        # Fallback empty pricing table with the right columns
+        return pd.DataFrame(columns=["Item", "Type", "Price"])
+
+
+def lookup_price(pricing_df, item_name, item_type, default_price=0):
+    """
+    Finds the price for one item (e.g. 'Chatbot', Type='Feature') in the pricing table.
+    Returns 'default_price' if the item isn't found in the CSV.
+    """
+    match = pricing_df[(pricing_df["Item"] == item_name) & (pricing_df["Type"] == item_type)]
+    if not match.empty:
+        return float(match.iloc[0]["Price"])
+    return float(default_price)
+
+
+def build_quote_line_items(client_row, pricing_df):
+    """
+    Builds the itemized list of charges for a client, using their saved
+    intake answers (Service Required, Number of Pages, Required Features)
+    matched against the pricing CSV.
+
+    Returns a Pandas DataFrame with columns: Item, Amount (₹)
+    This is the DataFrame shown in the editable table on the Quotation page.
+    """
+    line_items = []
+
+    # 1. Base price for the main service requested
+    service = safe_get(client_row, "Service Required", "Other")
+    base_price = lookup_price(pricing_df, service, "Service", default_price=10000)
+    line_items.append({"Item": f"{service} (base package, includes {INCLUDED_PAGES} pages)", "Amount (₹)": base_price})
+
+    # 2. Extra pages beyond the included amount
+    try:
+        pages = int(float(safe_get(client_row, "Number of Pages", INCLUDED_PAGES)))
+    except ValueError:
+        pages = INCLUDED_PAGES
+    extra_pages = max(0, pages - INCLUDED_PAGES)
+    if extra_pages > 0:
+        extra_page_price = lookup_price(pricing_df, "Extra Page", "Feature", default_price=1000)
+        line_items.append({
+            "Item": f"Extra Pages x{extra_pages}",
+            "Amount (₹)": extra_pages * extra_page_price,
+        })
+
+    # 3. Each requested feature (Contact Form, Chatbot, etc.)
+    features_text = safe_get(client_row, "Required Features", "")
+    features = [f.strip() for f in features_text.split(",") if f.strip() != ""]
+    for feature in features:
+        feature_price = lookup_price(pricing_df, feature, "Feature", default_price=2000)
+        line_items.append({"Item": feature, "Amount (₹)": feature_price})
+
+    return pd.DataFrame(line_items)
+
+
+def generate_quotation_html(client_row, line_items_df, settings_dict, valid_days=15):
+    """
+    Builds the final branded quotation document (as one HTML string), using:
+      - the client's details
+      - the (possibly edited) line items table
+      - the agency's branding settings (logo, name, color)
+    """
+    template_path = os.path.join(TEMPLATES_DIR, "quotation.html")
+    with open(template_path, "r", encoding="utf-8") as f:
+        template_text = f.read()
+
+    # Build the HTML table rows from the line items DataFrame
+    rows_html = ""
+    for _, item_row in line_items_df.iterrows():
+        item_name = html_escape.escape(str(item_row["Item"]))
+        amount = float(item_row["Amount (₹)"])
+        rows_html += f"<tr><td>{item_name}</td><td class='amount'>{amount:,.0f}</td></tr>\n"
+
+    total_amount = float(line_items_df["Amount (₹)"].sum())
+
+    # Build the logo <img> tag, or leave it blank if no logo was uploaded
+    logo_path = get_logo_path(settings_dict)
+    if logo_path:
+        # Streamlit Cloud can't reference local file paths from inside an
+        # HTML string opened in a browser, so we embed the image directly
+        # using base64 — this keeps the quotation a single, portable file.
+        import base64
+        with open(logo_path, "rb") as img_f:
+            encoded = base64.b64encode(img_f.read()).decode("utf-8")
+        ext = os.path.splitext(logo_path)[1].replace(".", "")
+        logo_tag = f'<img class="logo" src="data:image/{ext};base64,{encoded}">'
+    else:
+        logo_tag = ""
+
+    today = datetime.now()
+    valid_until = today + timedelta(days=valid_days)
+
+    replacements = {
+        "{{PRIMARY_COLOR}}": settings_dict.get("primary_color", "#4f46e5"),
+        "{{AGENCY_LOGO_TAG}}": logo_tag,
+        "{{AGENCY_NAME}}": html_escape.escape(settings_dict.get("agency_name", "Arkido")),
+        "{{AGENCY_TAGLINE}}": html_escape.escape(settings_dict.get("tagline", "")),
+        "{{AGENCY_CONTACT}}": html_escape.escape(
+            f"{settings_dict.get('email', '')}  {settings_dict.get('phone', '')}".strip()
+        ),
+        "{{QUOTE_DATE}}": today.strftime("%d %b %Y"),
+        "{{VALID_UNTIL}}": valid_until.strftime("%d %b %Y"),
+        "{{CLIENT_NAME}}": html_escape.escape(safe_get(client_row, "Client Name")),
+        "{{COMPANY_NAME}}": html_escape.escape(safe_get(client_row, "Company Name")),
+        "{{EMAIL}}": html_escape.escape(safe_get(client_row, "Email Address", "N/A")),
+        "{{PHONE}}": html_escape.escape(safe_get(client_row, "Phone Number", "N/A")),
+        "{{LINE_ITEM_ROWS}}": rows_html,
+        "{{TOTAL_AMOUNT}}": f"{total_amount:,.0f}",
+    }
+
+    for placeholder, value in replacements.items():
+        template_text = template_text.replace(placeholder, value)
+
+    return template_text, total_amount
+
+
+# --------------------------------------------------------------
+# 3. GLOBAL STYLING + BRANDED SIDEBAR
+# --------------------------------------------------------------
+
+# Load the agency's saved branding (logo, name, color) once, so every
+# page can use it — the header, sidebar, and generated documents.
+agency_settings = load_agency_settings()
+PRIMARY_COLOR = agency_settings.get("primary_color", "#4f46e5")
+
+# A small block of custom CSS gives the app a cleaner, more "branded" look
+# without needing any extra frontend framework. Streamlit lets us inject
+# plain CSS like this using st.markdown + unsafe_allow_html=True.
+st.markdown(
+    f"""
+    <style>
+        /* Make the main content area a bit more spacious */
+        .block-container {{
+            padding-top: 2rem;
+            padding-bottom: 2rem;
+        }}
+        /* Color the main action buttons using the agency's brand color */
+        .stButton > button, .stFormSubmitButton > button {{
+            background-color: {PRIMARY_COLOR};
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 0.5rem 1.2rem;
+            font-weight: 600;
+        }}
+        .stButton > button:hover, .stFormSubmitButton > button:hover {{
+            opacity: 0.9;
+            color: white;
+        }}
+        /* Style the metric "cards" on the Dashboard */
+        div[data-testid="stMetric"] {{
+            background-color: #f8fafc;
+            border: 1px solid #e5e7eb;
+            border-left: 4px solid {PRIMARY_COLOR};
+            border-radius: 10px;
+            padding: 12px 16px;
+        }}
+        /* Give section headers a touch of brand color */
+        h2, h3 {{
+            color: #1f2937;
+        }}
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+# --------------------------------------------------------------
+# 4. SIDEBAR NAVIGATION
+# --------------------------------------------------------------
+# A simple sidebar radio button lets us switch between "pages"
 # without needing Streamlit's multi-page folder setup. This keeps
 # everything in one file, which is easier for a beginner to follow.
 
-st.sidebar.title("ARKIDO")
+logo_path = get_logo_path(agency_settings)
+if logo_path:
+    st.sidebar.image(logo_path, use_container_width=True)
+
+st.sidebar.title(agency_settings.get("agency_name", "ARKIDO"))
+if agency_settings.get("tagline"):
+    st.sidebar.caption(agency_settings["tagline"])
+
+st.sidebar.divider()
+
 page = st.sidebar.radio(
     "Go to:",
-    ["📝 New Client Intake", "📊 Client Dashboard", "🖥️ Website Demo Generator"],
+    [
+        "📝 New Client Intake",
+        "📊 Client Dashboard",
+        "🖥️ Website Demo Generator",
+        "💰 Quotation Generator",
+        "⚙️ Agency Settings",
+    ],
 )
 
 
@@ -550,3 +809,169 @@ elif page == "🖥️ Website Demo Generator":
                 file_name=demo_filename,
                 mime="text/html",
             )
+
+
+# ================================================================
+# PAGE 4: QUOTATION GENERATOR
+# ================================================================
+elif page == "💰 Quotation Generator":
+
+    st.title("💰 Quotation Generator")
+    st.write(
+        "Auto-calculate a price quote from a client's saved requirements, "
+        "then fine-tune the numbers before generating a branded document."
+    )
+
+    df = load_clients()
+    pricing_df = load_pricing()
+
+    if df.empty:
+        st.info("No clients yet. Add a client from the 'New Client Intake' page first.")
+    elif pricing_df.empty:
+        st.warning(
+            "No pricing found. Make sure 'pricing_config.csv' exists in your project folder."
+        )
+    else:
+        # Pick which client to quote, same pattern as the Demo Generator page
+        client_labels = (
+            df["Client Name"].astype(str)
+            + " - "
+            + df["Company Name"].astype(str)
+            + " ("
+            + df["Date Added"].astype(str)
+            + ")"
+        )
+        selected_label = st.selectbox("Choose a client", client_labels.tolist())
+        selected_row = df[client_labels == selected_label].iloc[0]
+
+        st.caption(
+            f"Service: **{safe_get(selected_row, 'Service Required')}** | "
+            f"Pages: **{safe_get(selected_row, 'Number of Pages')}** | "
+            f"Features: **{safe_get(selected_row, 'Required Features', 'None')}**"
+        )
+
+        # Auto-calculate the starting line items from the client's saved answers
+        auto_line_items = build_quote_line_items(selected_row, pricing_df)
+
+        st.subheader("Line Items (editable)")
+        st.write(
+            "These amounts were auto-filled from your pricing sheet. "
+            "Double-click any cell to adjust it, or use the + row at the "
+            "bottom to add a custom line item."
+        )
+
+        # st.data_editor turns a DataFrame into an editable table right in
+        # the browser — the user can tweak prices before generating the quote.
+        edited_line_items = st.data_editor(
+            auto_line_items,
+            num_rows="dynamic",
+            use_container_width=True,
+            key="quote_editor",
+        )
+
+        # Recalculate the total live as the table is edited
+        if not edited_line_items.empty and "Amount (₹)" in edited_line_items.columns:
+            current_total = edited_line_items["Amount (₹)"].sum()
+        else:
+            current_total = 0
+
+        st.metric("Quotation Total", f"₹ {current_total:,.0f}")
+
+        valid_days = st.slider("Quotation valid for (days)", 7, 60, 15)
+
+        if st.button("⚡ Generate Quotation"):
+            quotation_html, total_amount = generate_quotation_html(
+                selected_row, edited_line_items, agency_settings, valid_days=valid_days
+            )
+
+            # Save the quotation permanently so you can find it again later
+            os.makedirs(QUOTATIONS_DIR, exist_ok=True)
+            safe_name = "".join(
+                c for c in str(selected_row["Client Name"]) if c.isalnum() or c == " "
+            ).strip().replace(" ", "_")
+            date_stamp = datetime.now().strftime("%Y%m%d")
+            quote_filename = f"{safe_name}_quotation_{date_stamp}.html"
+            quote_path = os.path.join(QUOTATIONS_DIR, quote_filename)
+
+            with open(quote_path, "w", encoding="utf-8") as f:
+                f.write(quotation_html)
+
+            st.success(f"Quotation generated and saved to quotations/{quote_filename}")
+
+            st.subheader("Live Preview")
+            st.components.v1.html(quotation_html, height=900, scrolling=True)
+
+            st.download_button(
+                "⬇️ Download Quotation (HTML)",
+                data=quotation_html,
+                file_name=quote_filename,
+                mime="text/html",
+            )
+            st.caption(
+                "Tip: open the downloaded file in your browser and use "
+                "'Print → Save as PDF' to send it as a PDF."
+            )
+
+
+# ================================================================
+# PAGE 5: AGENCY SETTINGS (BRANDING)
+# ================================================================
+elif page == "⚙️ Agency Settings":
+
+    st.title("⚙️ Agency Settings")
+    st.write(
+        "Set up your agency's branding once — your logo, name, and color "
+        "will automatically appear on the sidebar and on every generated "
+        "demo and quotation."
+    )
+
+    current_settings = load_agency_settings()
+
+    with st.form("agency_settings_form"):
+        agency_name = st.text_input("Agency Name", value=current_settings.get("agency_name", ""))
+        tagline = st.text_input("Tagline", value=current_settings.get("tagline", ""))
+
+        col1, col2 = st.columns(2)
+        with col1:
+            email = st.text_input("Contact Email", value=current_settings.get("email", ""))
+        with col2:
+            phone = st.text_input("Contact Phone", value=current_settings.get("phone", ""))
+
+        primary_color = st.color_picker(
+            "Brand Color", value=current_settings.get("primary_color", "#4f46e5")
+        )
+
+        logo_file = st.file_uploader(
+            "Upload Logo (PNG or JPG)", type=["png", "jpg", "jpeg"]
+        )
+
+        # Show the currently saved logo, if any, so the user knows it's already set
+        existing_logo_path = get_logo_path(current_settings)
+        if existing_logo_path and not logo_file:
+            st.caption("Current logo:")
+            st.image(existing_logo_path, width=150)
+
+        saved = st.form_submit_button("💾 Save Settings")
+
+        if saved:
+            new_settings = {
+                "agency_name": agency_name.strip() or "Arkido",
+                "tagline": tagline.strip(),
+                "email": email.strip(),
+                "phone": phone.strip(),
+                "primary_color": primary_color,
+                "logo_filename": current_settings.get("logo_filename", ""),
+            }
+
+            # If a new logo was uploaded, save it to the branding/ folder
+            if logo_file is not None:
+                os.makedirs(BRANDING_DIR, exist_ok=True)
+                file_extension = os.path.splitext(logo_file.name)[1]
+                logo_filename = f"logo{file_extension}"
+                logo_save_path = os.path.join(BRANDING_DIR, logo_filename)
+                with open(logo_save_path, "wb") as f:
+                    f.write(logo_file.getbuffer())
+                new_settings["logo_filename"] = logo_filename
+
+            save_agency_settings(new_settings)
+            st.success("Settings saved! Reload the page to see the new branding everywhere.")
